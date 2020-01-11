@@ -17,7 +17,7 @@
 
 ## Configuring OCEAN tokens 
 
-In `.env` file, replace value of `NODE` variable with appropriate web3 provider for a given network (for e.g.) Pacific, Mainnet, Rinkeby etc.
+In `.env` file, replace value of `WEB3_NODE` variable with appropriate web3 provider for a given network (for e.g.) Pacific, Mainnet, Rinkeby etc.
 
 Also, provide appropriate value for - 
 
