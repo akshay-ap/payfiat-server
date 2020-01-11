@@ -7,7 +7,7 @@ const erc20 = require("../abi/ERC20.json");
 const axios = require("axios");
 const { sendTx } = require("../utils/signer");
 
-let web3 = new Web3(process.env.INFURA_NODE);
+let web3 = new Web3(process.env.NODE);
 
 router.get("/balance", async (req, res, next) => {
   try {
