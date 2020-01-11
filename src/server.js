@@ -34,8 +34,9 @@ app.use(
 app.use("/fiat", fiatRouter);
 app.use("/crypto", cryptoRouter);
 
-app.get("/", (req, res) => {
-  res.send("Hello from API");
+app.get("/health", (req, res) => {
+  console.log("server check request")
+  res.status(200).json({});
 });
 
 app.listen(process.env.PORT || 4242, () =>

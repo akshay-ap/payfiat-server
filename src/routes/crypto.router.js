@@ -62,33 +62,32 @@ router.get("/currentPrice", async (req, res, next) => {
   res.status(200).json({ price });
 });
 
-router.post("/validatePayment", async (req, res, next) => {
+router.get("/checkTxStatus", async (req, res, next) => {
   try {
-    console.log(req.query.token);
-    let balance = 0;
-    let { amount, contractAddress, txhash, receiverAddress } = req.query;
-    const receipt = await web3.eth.getTransactionReceipt(txhash);
-    if (receipt && receipt.status) {
-      //payment is successful
-      //transfer ocean tokens
-      const oceanInstance = new web3.eth.Contract(erc20, contractAddress);
-      var txData = await oceanInstance.methods
-        .transfer(receiverAddress, amount)
-        .encodeABI();
+    let { txHash } = req.query;
+    console.log(`checking tx receipt for ${txHash}`)
+    const receipt = await web3.eth.getTransactionReceipt(txHash);
+    console.log(receipt)
+    if (receipt) {
 
-      let selectedToken = allTokens.find(t => t.address == contractAddress);
-      let sendAmount = parseAmount(amount, selectedToken.address);
-      //transfer tokens to receiver address
-      sendTx(
-        txData,
-        process.env.OCEAN_FROM,
-        process.env.OCEAN_CONTRACT_ADDRESS,
-        0
-      );
+      if (receipt.status) {
+        //transfer is successful
+        res.status(200).json({ status: "success" });
+      }
+      else if (receipt.status === null) {
+        //not processed yet
+        res.status(200).json({ status: "waiting" });
+      }
+      else if (receipt.status) {
+        //not processed yet
+        res.status(200).json({ status: "fail" });
+      }
+    } else {
+      res.status(500).json({ message: `unable to retrieve receipt for tx - ${txHash}` });
     }
   } catch (error) {
-    res.status(500).json({ message: "Oops! Some error occured" });
-    console.error(error);
+    res.status(500).json({ message: error.message });
+    console.error(error.message);
   }
 });
 

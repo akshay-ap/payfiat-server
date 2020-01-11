@@ -3,7 +3,7 @@ const Web3 = require("web3");
 const Common = require('ethereumjs-common');
 const Tx = require("ethereumjs-tx").Transaction;
 //instantite web3
-let web3 = new Web3(process.env.INFURA_NODE);
+let web3 = new Web3(process.env.WEB3_NODE);
 
 const customPacific = Common.default.forCustomChain(
   'ropsten',
