@@ -17,7 +17,7 @@ router.post("/create-payment-intent", async (req, res) => {
   const options = {
     ...body
   };
-  console.log(options)
+  console.log("/create-payment-intent", options)
 
   try {
     const paymentIntent = await stripe.paymentIntents.create(options);

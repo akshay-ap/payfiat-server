@@ -14,7 +14,11 @@ router.get("/balance", async (req, res, next) => {
     console.log(req.query.token);
     let balance = 0;
     let { token, senderAddress } = req.query;
-    if (token == "ETH") {
+    if(!token){
+      res.status(500).json({ message: "Missing `token` parameter" });
+    } else if(!senderAddress){
+      res.status(500).json({ message: "Missing `senderAddress` parameter" });
+    } else if (token == "ETH") {
       let bal = await web3.eth.getBalance(senderAddress);
       balance = readableBalance(bal, 18);
       console.log(balance);
@@ -40,26 +44,35 @@ router.get("/balance", async (req, res, next) => {
 
 router.get("/currentPrice", async (req, res, next) => {
   let price = 0;
-  try {
-    let { contractAddress, currency } = req.query;
-    let resp = await axios.get(
-      "https://api.coingecko.com/api/v3/simple/token_price/ethereum",
-      {
-        params: {
-          contract_addresses: contractAddress,
-          vs_currencies: currency
-        }
+  let { contractAddress, currency } = req.query;
+  if(!contractAddress){
+    res.status(500).json({ message: "Missing `contractAddress` parameter" });
+  } else if(!currency){
+    res.status(500).json({ message: "Missing `currency` parameter" });
+  } else {
+    try { 
+      if(process.env.ENV_TYPE != 'prod'){
+        price = parseFloat(process.env.TEST_PRICE);
+      } else {
+        let resp = await axios.get(
+          "https://api.coingecko.com/api/v3/simple/token_price/ethereum",
+          {
+            params: {
+              contract_addresses: contractAddress,
+              vs_currencies: currency
+            }
+          }
+        );
+        let data = resp.data;
+        price =  Object.values((Object.values(data)[0]))[0];
       }
-    );
+      
+    } catch (err) {
+      console.error(err.message);
+    }
 
-    let data = resp.data;
-    console.log(data[contractAddress][currency.toLowerCase()]);
-    price = data[contractAddress][currency.toLowerCase()];
-  } catch (err) {
-    console.error(err.message);
+    res.status(200).json({price});
   }
-
-  res.status(200).json({ price });
 });
 
 router.get("/checkTxStatus", async (req, res, next) => {
