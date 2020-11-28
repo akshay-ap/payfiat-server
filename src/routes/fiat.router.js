@@ -25,6 +25,7 @@ router.post("/create-payment-intent", async (req, res) => {
     "metadata[tokenAmount]": body.metadata.tokenAmount,
     "metadata[tokenId]": body.metadata.tokenId,
     "metadata[recieverAddress]": body.metadata.recieverAddress,
+    "metadata[txState]": "not_started",
   };
   console.log("/create-payment-intent", options);
 
@@ -35,6 +36,31 @@ router.post("/create-payment-intent", async (req, res) => {
   } catch (err) {
     res.status(500).json(err);
     console.error(err.message);
+  }
+});
+
+router.post("/tx-hash", async (req, res) => {
+  console.log("/tx-hash", req.body);
+  const paymentId = req.body.paymentId;
+  if (!paymentId) {
+    res.status(400).json({ message: "Missing parameter in request body" });
+    return;
+  }
+  try {
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentId);
+
+    console.log(`Metadata for [${paymentId}]`, paymentIntent.metadata);
+    if (!paymentIntent.metadata) {
+      res.status(400).json({ message: "No transaction state data found" });
+    } else {
+      res.status(200).json({
+        transactionHash: paymentIntent.metadata.transactionHash || "undefined",
+        txState: paymentIntent.metadata.txState,
+      });
+    }
+  } catch (error) {
+    console.error(`Unable to get tx hash for [${paymentId}]`, error);
+    res.status(400).json({ message: err.message });
   }
 });
 
@@ -108,6 +134,15 @@ router.post("/webhook", async (req, res) => {
     let parsedTokenAmount = 0;
     let isValid = true;
 
+    stripe.paymentIntents
+      .update(data.id, {
+        metadata: { ...data.metadata, txState: "Starting" },
+      })
+      .then((result) => console.log("Payment intent [txState] updated"))
+      .catch((error) => {
+        console.log(`Error updating txState for [${data.id}]`, error);
+      });
+
     try {
       parsedTokenAmount = data.metadata.tokenAmount;
     } catch (error) {
@@ -129,9 +164,15 @@ router.post("/webhook", async (req, res) => {
           console.log(`ID:[${data.id}]: Token transfer ${txnHash}`);
           stripe.paymentIntents
             .update(data.id, {
-              metadata: { ...data.metadata, transactionHash: txnHash },
+              metadata: {
+                ...data.metadata,
+                transactionHash: txnHash,
+                txState: "started",
+              },
             })
-            .then((result) => console.log("Payment intent updated", result))
+            .then(() =>
+              console.log("Payment intent txState updated to [started]")
+            )
             .catch((error) => {
               console.log(`Error updating [${data.id}]`, error);
             });
