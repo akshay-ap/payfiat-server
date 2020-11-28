@@ -26,7 +26,7 @@ app.use(
       if (req.originalUrl.startsWith("/webhook")) {
         req.rawBody = buf.toString();
       }
-    }
+    },
   })
 );
 
@@ -35,7 +35,7 @@ app.use("/fiat", fiatRouter);
 app.use("/crypto", cryptoRouter);
 
 app.get("/health", (req, res) => {
-  console.log("server check request")
+  console.log("server check request");
   res.status(200).json({});
 });
 

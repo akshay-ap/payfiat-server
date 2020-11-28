@@ -15,12 +15,22 @@ router.get("/public-key", (req, res) => {
 router.post("/create-payment-intent", async (req, res) => {
   const body = req.body;
   const options = {
-    ...body
+    amount: body.amount,
+    currency: body.currency,
+    description: body.description,
+    payment_method_types: body.payment_method_types,
+    shipping: body.shipping,
+    receipt_email: body.email,
+    "metadata[price]": body.metadata.price,
+    "metadata[tokenAmount]": body.metadata.tokenAmount,
+    "metadata[tokenId]": body.metadata.tokenId,
+    "metadata[recieverAddress]": body.metadata.recieverAddress,
   };
-  console.log("/create-payment-intent", options)
+  console.log("/create-payment-intent", options);
 
   try {
     const paymentIntent = await stripe.paymentIntents.create(options);
+    console.log(paymentIntent);
     res.status(200).json(paymentIntent);
   } catch (err) {
     res.status(500).json(err);
@@ -28,24 +38,30 @@ router.post("/create-payment-intent", async (req, res) => {
   }
 });
 
-
-router.get("/transfer-oceans", async (req, res) => {
-  const { receiverAddress, amount } = req.query;
+const transferToken = async (receiverAddress, amount) => {
   let oceanContractAddress = process.env.OCEAN_CONTRACT_ADDRESS;
 
   try {
     //create token instance from abi and contract address
     const tokenInstance = new web3.eth.Contract(abi, oceanContractAddress);
     let amt = parseAmount(amount).toString();
-    console.log(amt)
-    var txData = await tokenInstance.methods.transfer(receiverAddress, amt).encodeABI();
-    let txHash = await sendTx(txData, process.env.OCEAN_FROM_ADDRESS, oceanContractAddress, 0);
-    res.status(201).json({ txHash });
+    console.log(amt);
+    var txData = await tokenInstance.methods
+      .transfer(receiverAddress, amt)
+      .encodeABI();
+    let txHash = await sendTx(
+      txData,
+      process.env.OCEAN_FROM_ADDRESS,
+      oceanContractAddress,
+      0
+    );
+
+    return txHash;
   } catch (err) {
     res.status(500).json({ message: err.message });
     console.error(err.message);
   }
-});
+};
 
 // Webhook handler for asynchronous events.
 router.post("/webhook", async (req, res) => {
@@ -55,36 +71,78 @@ router.post("/webhook", async (req, res) => {
   if (process.env.STRIPE_WEBHOOK_SECRET) {
     // Retrieve the event by verifying the signature using the raw body and secret.
     let event;
-    let signature = req.headers["stripe-signature"];
 
-    try {
-      event = stripe.webhooks.constructEvent(
-        req.rawBody,
-        signature,
-        process.env.STRIPE_WEBHOOK_SECRET
-      );
-    } catch (err) {
-      console.log(`⚠️ Webhook signature verification failed.`);
-      return res.sendStatus(400);
-    }
+    let signature = req.headers["stripe-signature"];
+    let rawb = req.rawBody;
+    // try {
+    //   event = stripe.webhooks.constructEvent(
+    //     rawB,
+    //     signature,
+    //     process.env.STRIPE_WEBHOOK_SECRET
+    //   );
+    // } catch (err) {
+    //   console.log(`⚠️ Webhook signature verification failed.`);
+    //   return res.sendStatus(400);
+    // }
     // Extract the object from the event.
-    data = event.data;
+    console.log("body", req.body);
+    try {
+      event = req.body;
+    } catch (err) {
+      res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+    data = event.data.object;
     eventType = event.type;
   } else {
     // Webhook signing is recommended, but if the secret is not configured in `config.js`,
     // retrieve the event data directly from the request body.
-    data = req.body.data;
+    data = event.data.object;
     eventType = req.body.type;
   }
 
+  console.log("event type", eventType);
   if (eventType === "payment_intent.succeeded") {
-    // Fulfill any orders, e-mail receipts, etc
-    console.log("💰 Payment received!");
-  }
+    console.log(`Payment received: ${data.id}`);
+    let recieverAddress = data.metadata.recieverAddress;
+    let tokenAmount = data.metadata.tokenAmount;
+    let parsedTokenAmount = 0;
+    let isValid = true;
 
+    try {
+      parsedTokenAmount = data.metadata.tokenAmount;
+    } catch (error) {
+      isValid = false;
+      console.error(
+        `ID:[${data.id}]: Token amount [${tokenAmount}] not valid in metadata`
+      );
+    }
+
+    if (!web3.utils.isAddress(recieverAddress)) {
+      console.error(
+        `ID:[${data.id}]: Reciever address [${recieverAddress}] not valid in metadata`
+      );
+      isValid = false;
+    }
+    if (isValid) {
+      transferToken(recieverAddress, tokenAmount)
+        .then((txnHash) => {
+          console.log(`ID:[${data.id}]: Token transfer ${txnHash}`);
+          stripe.paymentIntents
+            .update(data.id, {
+              metadata: { ...data.metadata, transactionHash: txnHash },
+            })
+            .then((result) => console.log("Payment intent updated", result))
+            .catch((error) => {
+              console.log(`Error updating [${data.id}]`, error);
+            });
+        })
+        .catch((error) => {
+          console.error("Token transfer failed", error);
+        });
+    }
+  }
   if (eventType === "payment_intent.payment_failed") {
-    // Notify the customer that their order was not fulfilled
-    console.log("❌ Payment failed.");
+    console.log("Payment failed.");
   }
 
   res.sendStatus(200);
